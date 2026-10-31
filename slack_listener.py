@@ -282,13 +282,14 @@ def create_slack_app(config, check_auth=True):
     return app
 
 def start_periodic_scanner(config):
-    """Thunderbird のファイル更新監視（即時検知） ＋ 20分ごとの定期巡回"""
+    """Thunderbird のファイル更新監視（即時検知） ＋ 定期巡回（デフォルト: 2時間ごと）"""
     profile_path = os.environ.get("THUNDERBIRD_CONTAINER_PATH") or ("/data/thunderbird" if os.path.exists("/data/thunderbird") else config.get("thunderbird", {}).get("profile_path"))
-    # 定期巡回の間隔（デフォルト: 20分 = 1200秒）
-    interval_sec = config.get("sync_interval_seconds", 1200)
+    # 定期巡回の間隔（デフォルト: 2時間 = 7200秒）
+    interval_sec = config.get("sync_interval_seconds", 7200)
+    interval_desc = f"{interval_sec // 3600}時間" if interval_sec >= 3600 and interval_sec % 3600 == 0 else f"{interval_sec // 60}分"
 
     def watcher_loop():
-        print(f"👀 【ファイル更新監視】Thunderbird のメール受信をリアルタイム監視中（定期フルスキャン: {interval_sec // 60}分ごと）")
+        print(f"👀 【ファイル更新監視】Thunderbird のメール受信をリアルタイム監視中（定期フルスキャン: {interval_desc}ごと）")
         watch_dirs = [os.path.join(profile_path, d) for d in config.get("thunderbird", {}).get("watch_dirs", ["Mail/Local Folders"])]
         last_mtimes = {}
         for wd in watch_dirs:
@@ -318,13 +319,13 @@ def start_periodic_scanner(config):
                             except Exception:
                                 pass
 
-                # 新規メール追加を検知、または 20分が経過した場合にスキャン実行
+                # 新規メール追加を検知、または 定期間隔が経過した場合にスキャン実行
                 if has_changes:
                     print("📬 [検知] Thunderbird でのメール更新を検知しました。即時スキャンを実行します...")
                     scan_emails(config, dry_run=False)
                     last_full_scan = now
                 elif now - last_full_scan >= interval_sec:
-                    print(f"⏱️ 【定期巡回】{interval_sec // 60}分が経過したため、定期チェックを実行します...")
+                    print(f"⏱️ 【定期巡回】{interval_desc}が経過したため、定期チェックを実行します...")
                     scan_emails(config, dry_run=False)
                     last_full_scan = now
 
