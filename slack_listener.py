@@ -282,22 +282,56 @@ def create_slack_app(config, check_auth=True):
     return app
 
 def start_periodic_scanner(config):
-    """リスナー稼働中にバックグラウンドで定期的にメールスキャン＆Slack転送を実行"""
+    """Thunderbird のファイル更新監視（即時検知） ＋ 20分ごとの定期巡回"""
     profile_path = os.environ.get("THUNDERBIRD_CONTAINER_PATH") or ("/data/thunderbird" if os.path.exists("/data/thunderbird") else config.get("thunderbird", {}).get("profile_path"))
-    _, intervals = parse_thunderbird_prefs(profile_path)
-    # 同期間隔: config に秒数指定があれば優先、なければ prefs.js の分単位、デフォルトは 60 秒
-    interval_sec = config.get("sync_interval_seconds") or (intervals[0] * 60 if intervals else 60)
+    # 定期巡回の間隔（デフォルト: 20分 = 1200秒）
+    interval_sec = config.get("sync_interval_seconds", 1200)
 
-    def loop():
-        print(f"⏱️ 【自動巡回】{interval_sec}秒ごとに新着メールを自動チェック＆Slack転送します。")
+    def watcher_loop():
+        print(f"👀 【ファイル更新監視】Thunderbird のメール受信をリアルタイム監視中（定期フルスキャン: {interval_sec // 60}分ごと）")
+        watch_dirs = [os.path.join(profile_path, d) for d in config.get("thunderbird", {}).get("watch_dirs", ["Mail/Local Folders"])]
+        last_mtimes = {}
+        for wd in watch_dirs:
+            if os.path.exists(wd):
+                for root, _, _ in os.walk(wd):
+                    try:
+                        last_mtimes[root] = os.path.getmtime(root)
+                    except Exception:
+                        pass
+
+        last_full_scan = time.time()
+
         while True:
             try:
-                time.sleep(interval_sec)
-                scan_emails(config, dry_run=False)
-            except Exception as e:
-                print(f"⚠️ 自動巡回スキャンエラー: {e}", file=sys.stderr)
+                time.sleep(5)  # 5秒ごとにフォルダ更新日時のみを極小負荷でチェック
+                now = time.time()
+                has_changes = False
 
-    t = threading.Thread(target=loop, daemon=True)
+                for wd in watch_dirs:
+                    if os.path.exists(wd):
+                        for root, _, _ in os.walk(wd):
+                            try:
+                                current_mtime = os.path.getmtime(root)
+                                if root not in last_mtimes or current_mtime > last_mtimes[root]:
+                                    last_mtimes[root] = current_mtime
+                                    has_changes = True
+                            except Exception:
+                                pass
+
+                # 新規メール追加を検知、または 20分が経過した場合にスキャン実行
+                if has_changes:
+                    print("📬 [検知] Thunderbird でのメール更新を検知しました。即時スキャンを実行します...")
+                    scan_emails(config, dry_run=False)
+                    last_full_scan = now
+                elif now - last_full_scan >= interval_sec:
+                    print(f"⏱️ 【定期巡回】{interval_sec // 60}分が経過したため、定期チェックを実行します...")
+                    scan_emails(config, dry_run=False)
+                    last_full_scan = now
+
+            except Exception as e:
+                print(f"⚠️ 監視ループエラー: {e}", file=sys.stderr)
+
+    t = threading.Thread(target=watcher_loop, daemon=True)
     t.start()
 
 def main():
