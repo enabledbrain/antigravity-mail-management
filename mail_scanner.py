@@ -319,7 +319,7 @@ def generate_summary(text, config):
     api_key = config.get("ai", {}).get("api_key") or os.environ.get("GEMINI_API_KEY")
     if not api_key or "YOUR_GEMINI_API_KEY" in api_key:
         snippet = extract_smart_fallback_snippet(text)
-        return f"【要約 (抜粋)】\n{snippet}", False, None
+        return snippet, False, None
 
     model_name = config.get("ai", {}).get("model", "gemini-3.5-flash-lite")
     # 古いモデル名が指定されていた場合の自動フォールバック
@@ -327,9 +327,11 @@ def generate_summary(text, config):
         model_name = "gemini-3.5-flash-lite"
 
     base_prompt = (
-        "以下のメール本文から、要約と返信要否を判定してください。\n"
-        "出力フォーマット:\n"
-        "【要約】(3行以内・重要な用件を簡潔に)\n"
+        "以下のメール本文から、簡潔な要約（概要）と返信要否を判定してください。\n"
+        "【ルール】\n"
+        "1. 送信者名や件名は含めず、メールの用件・要点を自然な日本語で1〜2文（60〜120文字程度）にまとめてください。\n"
+        "2. 出力フォーマット:\n"
+        "【概要】(1〜2文の要約)\n"
         "【要返信】(はい/いいえ)\n"
         "【返信推奨期限】(期日がある場合はYYYY-MM-DD、ない場合はなし)"
     )
@@ -349,10 +351,17 @@ def generate_summary(text, config):
         needs_reply = "【要返信】はい" in raw_output or "【要返信】: はい" in raw_output
         m_date = re.search(r'【返信推奨期限】\s*(\d{4}-\d{2}-\d{2})', raw_output)
         deadline = m_date.group(1) if m_date else None
-        return raw_output, needs_reply, deadline
+
+        # 【概要】の行を抽出
+        m_desc = re.search(r'【概要】\s*(.+?)(?=\n【|$)', raw_output, re.DOTALL)
+        if m_desc:
+            desc = m_desc.group(1).strip()
+        else:
+            desc = raw_output.replace("【要約】", "").replace("【概要】", "").strip()
+        return desc, needs_reply, deadline
     except Exception as e:
         snippet = extract_smart_fallback_snippet(text)
-        return f"（要約エラー: {e}）\n{snippet}", False, None
+        return snippet, False, None
 
 def mark_as_read_local(file_path):
     """Thunderbird Maildir ファイル名を :2,S にリネームして既読化"""
@@ -399,80 +408,82 @@ def move_to_junk_local(file_path):
         print(f"⚠️ スパム移動エラー: {e}", file=sys.stderr)
         return False, str(e)
 
-def notify_slack_interactive(summary, mail_info, config, attachments=None, is_rescue=False, parent_ts=None, dry_run=False):
-    """Slack Block Kit による 3種ボタン付き通知"""
+def format_sender_name(sender_str):
+    """送信者ヘッダーから表示名（またはメールアドレス）をスマートに抽出"""
+    if not sender_str:
+        return "不明"
+    if "<" in sender_str:
+        name = sender_str.split("<")[0].strip().strip('"').strip("'")
+        if name:
+            return name
+        return sender_str.split("<")[1].split(">")[0].strip()
+    return sender_str.strip()
+
+def notify_slack_interactive(summary, mail_info, config, attachments=None, is_rescue=False, parent_ts=None, needs_reply=False, deadline=None, dry_run=False):
+    """Slack Block Kit による Overflow サブメニュー付きコンパクト通知 (パターン A)"""
     bot_token = config.get("slack", {}).get("bot_token")
     channel = config.get("slack", {}).get("channel", "#general")
 
+    sender_name = format_sender_name(mail_info.get("from", "不明"))
+    subject = mail_info.get("subject", "(件名なし)")
     target_badge = f"`[{mail_info.get('target_account', '宛先不明')}]`"
-    if is_rescue:
-        header_text = f"⚠️ *スパム判定されていますが重要メールの可能性があります* {target_badge}"
-    elif parent_ts:
-        header_text = f"💬 *【返信】メールを受信しました* {target_badge}"
-    else:
-        header_text = f"📬 *新着メールを受信しました* {target_badge}"
 
-    meta_text = (
-        f"• *件名*: {mail_info['subject']}\n"
-        f"• *差出人*: {mail_info['from']}\n"
-        f"• *日時*: {mail_info['date']}"
+    header_prefix = "⚠️ *[スパム疑い]* " if is_rescue else ("💬 " if parent_ts else "📬 ")
+    
+    status_suffix = ""
+    if needs_reply:
+        status_suffix = f" *（⚠️ 要返信: {deadline or 'お早めに'}）*"
+
+    # 概要を引用形式（> ）にする
+    desc_lines = [f"> {line}" for line in summary.splitlines() if line.strip()]
+    desc_quote = "\n".join(desc_lines) if desc_lines else f"> {summary}"
+
+    main_text = (
+        f"{header_prefix}*{sender_name}* さんから「*{subject}*」について、以下のメールが届きました。{target_badge}{status_suffix}\n\n"
+        f"{desc_quote}"
     )
 
-    attach_text = ""
     if attachments:
         attach_names = [f"📎 `{a['name']}` ({a['size']})" for a in attachments]
-        attach_text = "\n• *添付*: " + ", ".join(attach_names)
+        main_text += "\n\n" + " ".join(attach_names)
 
-    main_text = f"{header_text}\n{meta_text}{attach_text}\n\n📝 *AI 要約:*\n{summary}"
+    # Overflow サブメニュー（⋮）オプション
+    overflow_options = [
+        {
+            "text": {"type": "plain_text", "text": "📄 全文を展開", "emoji": True},
+            "value": f"expand_full_body:{mail_info['message_id']}"
+        },
+        {
+            "text": {"type": "plain_text", "text": "🤖 Antigravityで開く", "emoji": True},
+            "value": f"antigravity_open:{mail_info['message_id']}"
+        },
+        {
+            "text": {"type": "plain_text", "text": "✅ 既読にする", "emoji": True},
+            "value": f"mark_as_read:{mail_info['message_id']}"
+        },
+        {
+            "text": {"type": "plain_text", "text": "🚫 スパムにする", "emoji": True},
+            "value": f"mark_as_spam:{mail_info['message_id']}"
+        }
+    ]
 
-    # Block Kit UI の構築
+    # Block Kit UI の構築（右端に ⋮ サブメニューを配置）
     blocks = [
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": main_text}
+            "text": {"type": "mrkdwn", "text": main_text},
+            "accessory": {
+                "type": "overflow",
+                "action_id": "mail_overflow_action",
+                "options": overflow_options
+            }
         }
     ]
-
-    # アクションボタン
-    buttons = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "📄 全文を展開", "emoji": True},
-            "action_id": "expand_full_body",
-            "value": mail_info["message_id"]
-        },
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "🤖 Antigravityで開く", "emoji": True},
-            "action_id": "antigravity_open",
-            "value": mail_info["message_id"]
-        },
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "✅ 既読にする", "emoji": True},
-            "action_id": "mark_as_read",
-            "value": mail_info["message_id"]
-        }
-    ]
-
-    if is_rescue:
-        buttons.append({
-            "type": "button",
-            "text": {"type": "plain_text", "text": "🚫 スパムに登録", "emoji": True},
-            "style": "danger",
-            "action_id": "mark_as_spam",
-            "value": mail_info["message_id"]
-        })
-
-    blocks.append({
-        "type": "actions",
-        "elements": buttons
-    })
 
     if dry_run:
         print(f"\n[DRY-RUN] Slack Block Kit 送信スキップ:")
-        print(f"宛先: {target_badge} / 件名: {mail_info['subject']}")
-        print(f"要約:\n{summary}\n")
+        print(main_text)
+        print("Overflow Menu:", [opt["text"]["text"] for opt in overflow_options])
         return "mock_ts_1234567890.123456"
 
     if bot_token and not bot_token.startswith("xoxb-your"):
@@ -483,7 +494,7 @@ def notify_slack_interactive(summary, mail_info, config, attachments=None, is_re
         }
         payload = {
             "channel": channel,
-            "text": f"{header_text} - {mail_info['subject']}",
+            "text": f"📬 {sender_name} さんから「{subject}」が届きました",
             "blocks": blocks
         }
         if parent_ts:
@@ -654,7 +665,7 @@ def scan_emails(config, dry_run=False, catchup=False):
             # 過去スレッド自動遡及取り込み
             parent_ts = backfill_past_threads(conn, references, config.get("slack", {}).get("channel"), config.get("slack", {}).get("bot_token"))
 
-            slack_ts = notify_slack_interactive(summary, mail_info, config, attachments=attachments, is_rescue=is_rescue, parent_ts=parent_ts, dry_run=dry_run)
+            slack_ts = notify_slack_interactive(summary, mail_info, config, attachments=attachments, is_rescue=is_rescue, parent_ts=parent_ts, needs_reply=needs_reply, deadline=deadline, dry_run=dry_run)
             if slack_ts:
                 if not dry_run:
                     with conn:

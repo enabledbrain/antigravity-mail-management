@@ -118,6 +118,76 @@ def create_slack_app(config, check_auth=True):
     app = App(client=client, token_verification_enabled=check_auth)
     db_file = os.environ.get("DB_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), config.get("db_file", "mail_history.db")))
 
+    # 0. Overflow サブメニュー（⋮）ハンドラー
+    @app.action("mail_overflow_action")
+    def handle_mail_overflow(ack, body, client):
+        ack()
+        selected_option = body["actions"][0].get("selected_option", {})
+        selected_value = selected_option.get("value", "")
+        if ":" in selected_value:
+            action_type, message_id = selected_value.split(":", 1)
+        else:
+            action_type = selected_value
+            message_id = ""
+
+        channel = body["channel"]["id"]
+        msg_ts = body["message"]["ts"]
+
+        if action_type == "expand_full_body":
+            subject, sender, mail_body, file_path = get_mail_content_by_message_id(db_file, message_id)
+            if not mail_body:
+                client.chat_postMessage(channel=channel, thread_ts=msg_ts, text="⚠️ メール本文を取得できませんでした。")
+                return
+            clean_body = strip_quotes(mail_body)
+            display_body = clean_body if len(clean_body) <= 3000 else clean_body[:3000] + "\n\n... (長文のため一部省略)"
+            client.chat_postMessage(
+                channel=channel,
+                thread_ts=msg_ts,
+                text=f"📄 *メール全文プレビュー:*\n```{display_body}```"
+            )
+
+        elif action_type == "antigravity_open":
+            _, _, _, file_path = get_mail_content_by_message_id(db_file, message_id)
+            info_text = (
+                f"🤖 *Antigravity 連携情報:*\n"
+                f"• *Message-ID*: `{message_id}`\n"
+                f"• *ローカルファイル*: `{file_path or '不明'}`\n\n"
+                f"Antigravity のチャットで以下のように入力すると、このメールの深掘りや返信作成が可能です：\n"
+                f"> `このメール（{message_id}）について返信案を作って`"
+            )
+            client.chat_postMessage(channel=channel, thread_ts=msg_ts, text=info_text)
+
+        elif action_type == "mark_as_read":
+            conn = get_db_connection(db_file)
+            cursor = conn.cursor()
+            cursor.execute("SELECT file_path FROM email_state WHERE message_id = ?", (message_id,))
+            row = cursor.fetchone()
+            success = False
+            if row and row["file_path"]:
+                success = mark_as_read_local(row["file_path"])
+            if success:
+                with conn:
+                    conn.execute("UPDATE email_state SET replied = 1 WHERE message_id = ?", (message_id,))
+                conn.close()
+                client.chat_postMessage(channel=channel, thread_ts=msg_ts, text="✅ Thunderbird 上で既読に設定しました。")
+            else:
+                conn.close()
+                client.chat_postMessage(channel=channel, thread_ts=msg_ts, text="⚠️ ファイルの既読化に失敗しました。")
+
+        elif action_type == "mark_as_spam":
+            conn = get_db_connection(db_file)
+            cursor = conn.cursor()
+            cursor.execute("SELECT file_path FROM email_state WHERE message_id = ?", (message_id,))
+            row = cursor.fetchone()
+            success = False
+            if row and row["file_path"]:
+                success, _ = move_to_junk_local(row["file_path"])
+            conn.close()
+            if success:
+                client.chat_postMessage(channel=channel, thread_ts=msg_ts, text="🚫 メールを Thunderbird の Junk フォルダへ移動しました。")
+            else:
+                client.chat_postMessage(channel=channel, thread_ts=msg_ts, text="⚠️ スパムフォルダへの移動に失敗しました。")
+
     # 1. [📄 全文を展開] ボタン
     @app.action("expand_full_body")
     def handle_expand_full_body(ack, body, client):
