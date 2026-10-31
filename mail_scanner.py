@@ -48,9 +48,9 @@ def init_meilisearch(meili_url):
     try:
         requests.post(f"{meili_url}/indexes", json={"uid": "emails", "primaryKey": "id"}, timeout=5)
         requests.put(f"{index_url}/settings/filterable-attributes", 
-                     json=["date_iso", "sender", "subject", "message_id"], timeout=5)
+                     json=["timestamp", "date_iso", "sender", "subject", "message_id"], timeout=5)
         requests.put(f"{index_url}/settings/sortable-attributes", 
-                     json=["date_iso"], timeout=5)
+                     json=["timestamp", "date_iso"], timeout=5)
     except Exception as e:
         print(f"⚠️ Meilisearch 初期化警告: {e}", file=sys.stderr)
 
@@ -58,15 +58,15 @@ def get_doc_id(message_id):
     """Meilisearch 用の安全なドキュメント ID（ハッシュ）を生成"""
     return hashlib.sha256(message_id.encode("utf-8")).hexdigest()[:32]
 
-def parse_date_to_iso(date_str):
-    """メールの Date ヘッダー文字列を YYYY-MM-DD HH:MM:SS (ISO形式) に変換"""
+def parse_date_to_iso_and_timestamp(date_str):
+    """メールの Date ヘッダー文字列を ISO形式 と UNIXタイムスタンプ に変換"""
     if not date_str:
-        return ""
+        return "", 0
     try:
         dt = parsedate_to_datetime(date_str)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%Y-%m-%d %H:%M:%S"), int(dt.timestamp())
     except Exception:
-        return ""
+        return "", 0
 
 def decode_mime_words(s):
     """MIME エンコードされたヘッダー文字列を UTF-8 に復元"""
@@ -300,7 +300,7 @@ def scan_emails(config, dry_run=False, catchup=False):
             references = [ref.strip("<> \r\n") for ref in references_raw.split() if ref.strip("<> \r\n")]
 
             date_str = decode_mime_words(msg.get("Date", ""))
-            date_iso = parse_date_to_iso(date_str)
+            date_iso, ts_val = parse_date_to_iso_and_timestamp(date_str)
             subject = decode_mime_words(msg.get("Subject", "(件名なし)"))
             sender = decode_mime_words(msg.get("From", "(不明)"))
 
@@ -312,6 +312,7 @@ def scan_emails(config, dry_run=False, catchup=False):
                 "from": sender,
                 "date": date_str,
                 "date_iso": date_iso,
+                "timestamp": ts_val,
                 "file_path": file_path,
             }
 
@@ -326,6 +327,7 @@ def scan_emails(config, dry_run=False, catchup=False):
                     "sender": sender,
                     "date_str": date_str,
                     "date_iso": date_iso,
+                    "timestamp": ts_val,
                     "summary": "（過去メール同期済み）",
                     "body": body_snippet,
                     "file_path": file_path,
@@ -365,6 +367,7 @@ def scan_emails(config, dry_run=False, catchup=False):
                         "sender": sender,
                         "date_str": date_str,
                         "date_iso": date_iso,
+                        "timestamp": ts_val,
                         "summary": summary,
                         "body": body_snippet,
                         "slack_ts": slack_ts,
@@ -403,16 +406,25 @@ def search_emails(config, keyword=None, since=None, until=None, limit=10):
 
     filter_conditions = []
     if since:
-        since_str = since if " " in since else f"{since} 00:00:00"
-        filter_conditions.append(f'date_iso >= "{since_str}"')
+        try:
+            since_dt = datetime.strptime(since.strip(), "%Y-%m-%d")
+            since_ts = int(since_dt.timestamp())
+            filter_conditions.append(f"timestamp >= {since_ts}")
+        except Exception:
+            pass
+
     if until:
-        until_str = until if " " in until else f"{until} 23:59:59"
-        filter_conditions.append(f'date_iso <= "{until_str}"')
+        try:
+            until_dt = datetime.strptime(until.strip(), "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            until_ts = int(until_dt.timestamp())
+            filter_conditions.append(f"timestamp <= {until_ts}")
+        except Exception:
+            pass
 
     payload = {
         "q": keyword or "",
         "limit": limit,
-        "sort": ["date_iso:desc"],
+        "sort": ["timestamp:desc"],
     }
     if filter_conditions:
         payload["filter"] = " AND ".join(filter_conditions)

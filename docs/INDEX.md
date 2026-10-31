@@ -18,6 +18,7 @@
 | ドキュメント | 概要 | 最終更新日 | キーワード |
 | :--- | :--- | :---: | :--- |
 | [**`README.md`**](../README.md) | プロジェクト概要、クイックスタート、基本機能、ロードマップ | 2026-10-31 | <details><summary>一覧</summary>Docker, Meilisearch, SQLite, Thunderbird, Slack</details> |
+| [**`docs/slack-setup.md`**](slack-setup.md) | Slack アプリ（Bot）連携の趣旨・必要要件・作成手順ガイド | 2026-10-31 | <details><summary>一覧</summary>Slack Bot, chat:write, Manifest, スレッド維持</details> |
 | [**`docs/agents/README.md`**](agents/README.md) | AI エージェント別（Antigravity, Claude Code, Cursor, Copilot）設定・運用比較ガイド | 2026-10-31 | <details><summary>一覧</summary>Antigravity, Claude Code, Cursor, Windsurf, Copilot, スケジューラ</details> |
 | [**`AGENTS.md`**](../AGENTS.md) | 自律型 AI エージェント向け共通コアガードレール＆運用指示書 | 2026-10-31 | <details><summary>一覧</summary>マルチエージェント, ガードレール, セキュリティ, 対称同期</details> |
 | [**`.agent/skills/ai-mailer-setup/SKILL.md`**](../.agent/skills/ai-mailer-setup/SKILL.md) | AI による対話型セットアップ・環境自動診断スキル | 2026-10-31 | <details><summary>一覧</summary>オンボーディング, 自動診断, プロファイル探索, 初期化</details> |

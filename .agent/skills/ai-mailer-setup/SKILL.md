@@ -26,9 +26,12 @@ description: AI Mailer (antigravity-mail-management) の初期導入・環境自
 ### ステップ 2: 環境設定ファイル (`.env`, `config.json`) の生成
 1. `.env.example` から `.env` を作成し、ステップ1で確定した `THUNDERBIRD_PROFILE_PATH` を書き込みます。
 2. `config.example.json` から `config.json` を作成します。
-3. ユーザーに以下をヒアリングします：
-   - Slack 通知先の Webhook URL（または Bot Token）
-   - （任意）Gemini API キー（Antigravity 連携時は不要であることを案内）
+3. ユーザーに以下をヒアリング・案内します：
+   - **Slack 連携の趣旨**:
+     - 目的: 新着メール要約の投稿、および同一メールスレッドの継続（スレッド維持）。
+     - 必要な権限: `chat:write`（無料プランで完全利用可能）。
+     - 取得手順詳細は `docs/slack-setup.md` を案内（Manifest YAML による 1 クリック作成、または Blank app での作成）。
+   - **Gemini API キー**: Antigravity 連携時は不要（完全無料）であることを案内。
 
 ### ステップ 3: Docker コンテナの起動確認 ＆ 初回キャッチアップ
 1. Docker Desktop が起動しているか確認します（`docker info`）。
