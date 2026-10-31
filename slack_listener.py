@@ -9,6 +9,8 @@ Issue #13: Slack 3種ボタン & Thunderbird 既読/スパム双方向同期
 import os
 import re
 import sys
+import time
+import threading
 import json
 import sqlite3
 import email
@@ -27,7 +29,9 @@ from mail_scanner import (
     move_to_junk_local,
     extract_body_and_attachments,
     decode_mime_words,
-    strip_quotes
+    strip_quotes,
+    scan_emails,
+    parse_thunderbird_prefs
 )
 
 def load_config():
@@ -276,6 +280,25 @@ def create_slack_app(config, check_auth=True):
 
     return app
 
+def start_periodic_scanner(config):
+    """リスナー稼働中にバックグラウンドで定期的にメールスキャン＆Slack転送を実行"""
+    profile_path = os.environ.get("THUNDERBIRD_CONTAINER_PATH") or ("/data/thunderbird" if os.path.exists("/data/thunderbird") else config.get("thunderbird", {}).get("profile_path"))
+    _, intervals = parse_thunderbird_prefs(profile_path)
+    # 同期間隔: config に秒数指定があれば優先、なければ prefs.js の分単位、デフォルトは 60 秒
+    interval_sec = config.get("sync_interval_seconds") or (intervals[0] * 60 if intervals else 60)
+
+    def loop():
+        print(f"⏱️ 【自動巡回】{interval_sec}秒ごとに新着メールを自動チェック＆Slack転送します。")
+        while True:
+            try:
+                time.sleep(interval_sec)
+                scan_emails(config, dry_run=False)
+            except Exception as e:
+                print(f"⚠️ 自動巡回スキャンエラー: {e}", file=sys.stderr)
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+
 def main():
     config = load_config()
     app_token = config.get("slack", {}).get("app_token") or os.environ.get("SLACK_APP_TOKEN")
@@ -293,6 +316,9 @@ def main():
     app = create_slack_app(config)
     if not app:
         sys.exit(1)
+
+    # バックグラウンドでの自動巡回スレッドを起動
+    start_periodic_scanner(config)
 
     print("🚀 Slack Socket Mode リスナーを起動中（完全ローカル・ポート開放不要）...")
     handler = SocketModeHandler(app, app_token)

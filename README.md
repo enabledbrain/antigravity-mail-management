@@ -12,6 +12,7 @@
 - [7. AI 要約ルールのカスタマイズ](#7-ai-要約ルールのカスタマイズ)
 - [8. データ永続化とプライバシー](#8-データ永続化とプライバシー)
 - [9. ロードマップ (GitHub Issues)](#9-ロードマップ-github-issues)
+- [10. トラブルシューティング](#10-トラブルシューティング)
 </details>
 
 Thunderbird（POP3 / Maildir 形式）の新着メールを自動検知し、AI が要約して Slack に通知・スレッド維持・超高速な日本語全文検索を行う、Antigravity 向けのメール自動化・管理ツールです。
@@ -198,6 +199,21 @@ Meilisearch により、日本語の形態素解析・あいまい検索・日�
 - [x] **#13**: Slack 3種ボタン & Thunderbird 既読フラグ双方向同期 ([全文を展開], [Antigravityで開く], [既読にする])
 - [x] **#14**: スパムメール自動除外 & AI誤判定レスキュー通知 (スパム登録ボタン付き)
 - [ ] **#15**: Thunderbird 連携によるメール送信機能 (thunderbird-cli 連携 / SMTP直接操作の回避)
+
+---
+
+## 10. トラブルシューティング
+
+よくあるエラーや困ったときの対処方法は [**`docs/troubleshooting.md`**](docs/troubleshooting.md) に詳細をまとめています：
+
+- **`Operation not permitted` エラー (macOS / Google Drive)**:
+  - クラウド同期フォルダのアクセス制限を回避して直接 Docker 起動する方法（`docker compose run --rm ai-mailer`）
+- **Slack Socket Mode リスナーが起動しない**:
+  - `xapp-...` (App-Level Token) の発行と設定方法
+- **AI 要約がメール本文の切り貼り（簡易抜粋）になってしまう**:
+  - Gemini API キー（無料）の設定方法
+- **SQLite DB のカラム不足エラー**:
+  - 自動マイグレーションの適用方法
 
 ---
 
