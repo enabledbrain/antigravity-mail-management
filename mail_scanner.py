@@ -322,7 +322,7 @@ def generate_summary(text, config):
         return f"【要約 (抜粋)】\n{snippet}", False, None
 
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{config['ai'].get('model', 'gemini-2.5-flash')}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{config['ai'].get('model', 'gemini-3.8-flash')}:generateContent?key={api_key}"
         base_prompt = (
             "以下のメール本文から、要約と返信要否を判定してください。\n"
             "出力フォーマット:\n"

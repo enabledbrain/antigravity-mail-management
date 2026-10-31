@@ -80,7 +80,7 @@ def get_message_id_by_slack_ts(db_file, slack_ts):
 def generate_ai_reply(prompt, mail_context, config):
     """Gemini API 等を使って返信案や回答を生成"""
     api_key = config.get("ai", {}).get("api_key")
-    model_name = config.get("ai", {}).get("model", "gemini-2.5-flash")
+    model_name = config.get("ai", {}).get("model", "gemini-3.8-flash")
 
     if not api_key or "YOUR_GEMINI_API_KEY" in api_key:
         return f"💡 [ローカル返信モック]\nご指示「{prompt}」を承りました。\nGemini APIキーを設定すると、AIによる高精度な自動返信案・回答がここに生成されます。"
