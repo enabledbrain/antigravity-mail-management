@@ -1,0 +1,32 @@
+services:
+  # ① Lightweight Full-Text Search Engine (Rust / Meilisearch)
+  search-engine:
+    image: getmeili/meilisearch:v1.12
+    container_name: ai-mailer-search
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./data/meili_data:/meili_data
+    environment:
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_ENV=development
+
+  # ② Mail Scanner & Notifier Worker (Python)
+  ai-mailer:
+    build: .
+    image: ai-mailer:latest
+    container_name: ai-mailer
+    depends_on:
+      - search-engine
+    volumes:
+      # Mount host Thunderbird profile directory as read-only
+      - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:ro
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Tokyo
+      - CONFIG_PATH=/app/config.json
+      - DB_FILE=/app/data/mail_history.db
+      - MEILI_URL=http://search-engine:7700
+      - PYTHONUNBUFFERED=1

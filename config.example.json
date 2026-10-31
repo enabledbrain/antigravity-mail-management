@@ -1,0 +1,31 @@
+{
+  "thunderbird": {
+    "profile_path": "/path/to/Thunderbird/Profiles/xxxxxxxx.default",
+    "watch_dirs": [
+      "Mail/Local Folders/Inbox",
+      "Mail/Local Folders"
+    ],
+    "file_extension": ".eml"
+  },
+  "ai": {
+    "provider": "gemini",
+    "api_key": "YOUR_GEMINI_API_KEY_OR_EMPTY_IF_USING_ANTIGRAVITY",
+    "model": "gemini-2.5-flash",
+    "prompt_summary": "以下のメール内容から、【送信者名】【件名】【緊急度 (高/中/低)】【要約 (3行以内)】【要対応アクション】を簡潔にまとめてください。"
+  },
+  "slack": {
+    "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+    "bot_token": "xoxb-your-slack-bot-token",
+    "channel": "#general",
+    "use_threads": true
+  },
+  "smtp": {
+    "enabled": false,
+    "host": "smtp.example.com",
+    "port": 587,
+    "user": "user@example.com",
+    "password": "YOUR_SMTP_PASSWORD",
+    "use_tls": true
+  },
+  "db_file": "mail_history.db"
+}

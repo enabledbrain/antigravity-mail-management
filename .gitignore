@@ -1,0 +1,26 @@
+# Secrets & Local Configurations
+config.json
+.env
+.env.local
+
+# Data & Databases (Persistent volume on host)
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# OS / Editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
