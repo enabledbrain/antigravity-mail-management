@@ -39,6 +39,7 @@ Slack 側で作成するアプリに求められるのは以下の **1 点のみ
 
 取得する値：
 - **`Bot User OAuth Token`**（`xoxb-` で始まるトークン文字列）
+- **`App-Level Token`**（`xapp-` で始まるトークン文字列 ※ボタン操作や遠隔対話を利用する場合）
 
 ---
 
@@ -62,10 +63,22 @@ oauth_config:
   scopes:
     bot:
       - chat:write
+      - app_mentions:read
+settings:
+  interactivity:
+    is_enabled: true
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - app_mention
 ```
 
 4. 左メニュー「**Install App**」から「**Install to Workspace**」をクリックして許可。
 5. 表示された **`Bot User OAuth Token` (`xoxb-...`)** をコピーします。
+6. 左メニュー「**Basic Information**」➔「**App-Level Tokens**」で「**Generate Token and Scopes**」をクリック。
+   - Token Name: `socket-mode`
+   - Scope: **`connections:write`** を追加して生成
+   - 発行された **`App-Level Token` (`xapp-...`)** をコピーします。
 
 ---
 
@@ -97,7 +110,8 @@ Slack アプリを開き、通知を受け取りたいチャンネル（例: `#g
 ```json
 {
   "slack": {
-    "bot_token": "xoxb-あなたのトークン",
+    "bot_token": "xoxb-あなたのボットトークン",
+    "app_token": "xapp-あなたのアプリートークン",
     "channel": "#mail-notifications",
     "use_threads": true
   }

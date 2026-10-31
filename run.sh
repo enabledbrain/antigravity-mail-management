@@ -15,5 +15,12 @@ if ! docker compose ps | grep -q "ai-mailer-search"; then
   docker compose up -d search-engine
 fi
 
+# Run Slack Socket Mode listener if requested
+if [ "$1" = "--listen" ]; then
+  echo "🚀 [Slack Listener] Starting Socket Mode interactive listener..."
+  docker compose run --rm --entrypoint python3 ai-mailer slack_listener.py
+  exit 0
+fi
+
 # Run AI Mailer worker
 docker compose run --rm ai-mailer "$@"

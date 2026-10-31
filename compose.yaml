@@ -20,8 +20,29 @@ services:
     depends_on:
       - search-engine
     volumes:
-      # Mount host Thunderbird profile directory as read-only
-      - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:ro
+      # Mount host Thunderbird profile directory
+      - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:rw
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Tokyo
+      - CONFIG_PATH=/app/config.json
+      - DB_FILE=/app/data/mail_history.db
+      - MEILI_URL=http://search-engine:7700
+      - PYTHONUNBUFFERED=1
+
+  # ③ Slack Socket Mode Listener (Interactive Buttons & Remote Chat)
+  slack-listener:
+    build: .
+    image: ai-mailer:latest
+    container_name: ai-mailer-slack-listener
+    restart: unless-stopped
+    command: ["slack_listener.py"]
+    profiles: ["listener"]
+    depends_on:
+      - search-engine
+    volumes:
+      - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:rw
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
     environment:

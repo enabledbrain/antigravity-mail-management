@@ -10,8 +10,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application script
-COPY mail_scanner.py .
+# Copy application script and rules
+COPY mail_scanner.py slack_listener.py ./
+COPY rules ./rules
 
 # Create directory for persistent data
 RUN mkdir -p /app/data
@@ -20,6 +21,8 @@ RUN mkdir -p /app/data
 ENV CONFIG_PATH=/app/config.json
 ENV DB_FILE=/app/data/mail_history.db
 ENV MEILI_URL=http://search-engine:7700
+ENV RULES_PATH=/app/rules/summary_rules.md
 ENV PYTHONUNBUFFERED=1
 
-ENTRYPOINT ["python3", "mail_scanner.py"]
+ENTRYPOINT ["python3"]
+CMD ["mail_scanner.py"]

@@ -16,6 +16,7 @@
   "slack": {
     "webhook_url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
     "bot_token": "xoxb-your-slack-bot-token",
+    "app_token": "xapp-your-app-level-token",
     "channel": "#general",
     "use_threads": true
   },
