@@ -24,6 +24,8 @@ services:
       - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:rw
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
+      - ./mail_scanner.py:/app/mail_scanner.py:ro
+      - ./slack_listener.py:/app/slack_listener.py:ro
     environment:
       - TZ=Asia/Tokyo
       - CONFIG_PATH=/app/config.json
@@ -45,6 +47,8 @@ services:
       - ${THUNDERBIRD_PROFILE_PATH}:/data/thunderbird:rw
       - ./config.json:/app/config.json:ro
       - ./data:/app/data
+      - ./mail_scanner.py:/app/mail_scanner.py:ro
+      - ./slack_listener.py:/app/slack_listener.py:ro
     environment:
       - TZ=Asia/Tokyo
       - CONFIG_PATH=/app/config.json
