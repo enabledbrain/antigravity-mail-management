@@ -439,7 +439,7 @@ def notify_slack_interactive(summary, mail_info, config, attachments=None, is_re
     desc_quote = "\n".join(desc_lines) if desc_lines else f"> {summary}"
 
     main_text = (
-        f"{header_prefix}*{sender_name}* さんから「*{subject}*」について、以下のメールが届きました。{target_badge}{status_suffix}\n\n"
+        f"{header_prefix}{target_badge} *{sender_name}* さんから「*{subject}*」について、以下のメールが届きました。{status_suffix}\n\n"
         f"{desc_quote}"
     )
 
