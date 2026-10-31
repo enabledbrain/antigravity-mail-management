@@ -321,35 +321,38 @@ def generate_summary(text, config):
         snippet = extract_smart_fallback_snippet(text)
         return f"【要約 (抜粋)】\n{snippet}", False, None
 
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{config['ai'].get('model', 'gemini-3.8-flash')}:generateContent?key={api_key}"
-        base_prompt = (
-            "以下のメール本文から、要約と返信要否を判定してください。\n"
-            "出力フォーマット:\n"
-            "【要約】(3行以内)\n"
-            "【要返信】(はい/いいえ)\n"
-            "【返信推奨期限】(期日がある場合はYYYY-MM-DD、ない場合はなし)"
-        )
-        user_rules = get_user_rules()
-        prompt = base_prompt
-        if user_rules:
-            prompt += f"\n\n【ユーザー個別適用ルール】\n{user_rules}"
+    model_name = config.get("ai", {}).get("model", "gemini-3.5-flash-lite")
+    # 古いモデル名が指定されていた場合の自動フォールバック
+    if any(old in model_name for old in ["2.5", "2.0", "1.5", "gemini-flash"]):
+        model_name = "gemini-3.5-flash-lite"
 
-        payload = {
-            "contents": [{
-                "parts": [{"text": f"{prompt}\n\n--- メール本文 ---\n{text[:4000]}"}]
-            }]
-        }
-        res = requests.post(url, json=payload, timeout=30)
-        res.raise_for_status()
-        data = res.json()
-        raw_output = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    base_prompt = (
+        "以下のメール本文から、要約と返信要否を判定してください。\n"
+        "出力フォーマット:\n"
+        "【要約】(3行以内・重要な用件を簡潔に)\n"
+        "【要返信】(はい/いいえ)\n"
+        "【返信推奨期限】(期日がある場合はYYYY-MM-DD、ない場合はなし)"
+    )
+    user_rules = get_user_rules()
+    prompt = base_prompt
+    if user_rules:
+        prompt += f"\n\n【ユーザー個別適用ルール】\n{user_rules}"
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=f"{prompt}\n\n--- メール本文 ---\n{text[:4000]}"
+        )
+        raw_output = response.text.strip()
         needs_reply = "【要返信】はい" in raw_output or "【要返信】: はい" in raw_output
         m_date = re.search(r'【返信推奨期限】\s*(\d{4}-\d{2}-\d{2})', raw_output)
         deadline = m_date.group(1) if m_date else None
         return raw_output, needs_reply, deadline
     except Exception as e:
-        return f"（要約エラー: {e}）\n{text[:150]}...", False, None
+        snippet = extract_smart_fallback_snippet(text)
+        return f"（要約エラー: {e}）\n{snippet}", False, None
 
 def mark_as_read_local(file_path):
     """Thunderbird Maildir ファイル名を :2,S にリネームして既読化"""

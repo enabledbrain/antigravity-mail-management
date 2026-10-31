@@ -79,14 +79,17 @@ def get_message_id_by_slack_ts(db_file, slack_ts):
 
 def generate_ai_reply(prompt, mail_context, config):
     """Gemini API 等を使って返信案や回答を生成"""
-    api_key = config.get("ai", {}).get("api_key")
-    model_name = config.get("ai", {}).get("model", "gemini-3.8-flash")
+    api_key = config.get("ai", {}).get("api_key") or os.environ.get("GEMINI_API_KEY")
+    model_name = config.get("ai", {}).get("model", "gemini-3.5-flash-lite")
+    if any(old in model_name for old in ["2.5", "2.0", "1.5", "gemini-flash"]):
+        model_name = "gemini-3.5-flash-lite"
 
     if not api_key or "YOUR_GEMINI_API_KEY" in api_key:
         return f"💡 [ローカル返信モック]\nご指示「{prompt}」を承りました。\nGemini APIキーを設定すると、AIによる高精度な自動返信案・回答がここに生成されます。"
 
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+        from google import genai
+        client = genai.Client(api_key=api_key)
         system_instruction = (
             "あなたは優秀なビジネスメールAIアシスタントです。\n"
             "対象メールの文脈を踏まえ、ユーザーからの指示に対して丁寧かつ的確なビジネス返信案や回答を作成してください。"
@@ -96,13 +99,11 @@ def generate_ai_reply(prompt, mail_context, config):
             f"--- 【対象メール情報】 ---\n{mail_context}\n\n"
             f"--- 【ユーザーからの指示】 ---\n{prompt}"
         )
-        payload = {
-            "contents": [{"parts": [{"text": full_content}]}]
-        }
-        res = requests.post(url, json=payload, timeout=30)
-        res.raise_for_status()
-        data = res.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        resp = client.models.generate_content(
+            model=model_name,
+            contents=full_content
+        )
+        return resp.text.strip()
     except Exception as e:
         return f"⚠️ AI 生成エラー: {e}"
 
