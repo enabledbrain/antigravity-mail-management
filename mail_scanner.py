@@ -32,7 +32,7 @@ MEILI_URL = os.environ.get("MEILI_URL", "http://search-engine:7700")
 RULES_PATH = os.environ.get("RULES_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "rules", "summary_rules.md"))
 
 def get_db_connection(db_path):
-    """SQLite 接続を取得（軽量管理テーブルのみ作成）"""
+    """SQLite 接続を取得（軽量管理テーブルのみ作成 & 自動マイグレーション）"""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     with conn:
@@ -49,6 +49,19 @@ def get_db_connection(db_path):
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # 既存DBへの自動カラム追加（マイグレーション）
+        existing_cols = [r[1] for r in conn.execute("PRAGMA table_info(email_state)").fetchall()]
+        new_cols = [
+            ("file_path", "TEXT"),
+            ("target_account", "TEXT"),
+            ("needs_reply", "INTEGER DEFAULT 0"),
+            ("replied", "INTEGER DEFAULT 0"),
+            ("reply_deadline", "TEXT"),
+        ]
+        for col_name, col_type in new_cols:
+            if col_name not in existing_cols:
+                conn.execute(f"ALTER TABLE email_state ADD COLUMN {col_name} {col_type}")
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_id ON email_state(parent_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_slack_ts ON email_state(slack_ts)")
     return conn
