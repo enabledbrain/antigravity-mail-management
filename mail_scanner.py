@@ -277,13 +277,49 @@ def get_user_rules():
             pass
     return ""
 
+def extract_smart_fallback_snippet(text):
+    """APIキー未設定時のフォールバック: 挨拶や定型行を除外し、用件の核心部分を抽出"""
+    if not text:
+        return "(本文なし)"
+    greeting_patterns = [
+        r"^いつも(大変)?お世話になっております.*",
+        r"^お疲れ様です.*",
+        r"^ご担当者様.*",
+        r"^各位.*",
+        r"^.*様$",
+        r"^.*宛$"
+    ]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    # お問い合わせフォームで「お問い合わせ内容」「ご用件」等がある場合はそこを優先抽出
+    core_idx = -1
+    for i, line in enumerate(lines):
+        if any(keyword in line for keyword in ["お問い合わせ内容", "ご相談内容", "相談内容", "ご用件", "内容:"]):
+            core_idx = i
+            break
+
+    if core_idx != -1 and core_idx < len(lines):
+        content_lines = lines[core_idx:core_idx + 5]
+    else:
+        content_lines = []
+        for line in lines:
+            if any(re.match(pat, line) for pat in greeting_patterns):
+                continue
+            content_lines.append(line)
+            if len(content_lines) >= 5:
+                break
+
+    if not content_lines:
+        content_lines = lines[:5]
+
+    return "\n".join(content_lines)
+
 def generate_summary(text, config):
     """LLM API (Gemini 等) またはフォールバックで要約＆要返信判定を生成"""
-    api_key = config.get("ai", {}).get("api_key")
+    api_key = config.get("ai", {}).get("api_key") or os.environ.get("GEMINI_API_KEY")
     if not api_key or "YOUR_GEMINI_API_KEY" in api_key:
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        snippet = "\n".join(lines[:4])
-        return f"【要約】\n{snippet}...", False, None
+        snippet = extract_smart_fallback_snippet(text)
+        return f"【要約 (抜粋)】\n{snippet}", False, None
 
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{config['ai'].get('model', 'gemini-2.5-flash')}:generateContent?key={api_key}"
